@@ -58,7 +58,11 @@ class _IdentityMapping(_Base):
 
     email = Column(String, primary_key=True)
     user_id = Column(String, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    # timezone=True: the default is offset-aware; Postgres/asyncpg rejects an
+    # aware value for a naive TIMESTAMP column (sqlite silently accepts it).
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 def _normalize_email(email: str) -> str:

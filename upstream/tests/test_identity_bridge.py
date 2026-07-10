@@ -347,3 +347,13 @@ def test_build_from_env_prefers_explicit_dsn(monkeypatch, tmp_path):
     bridge = build_identity_bridge_from_env(api_url=API_URL)
     assert bridge is not None
     assert bridge.store_dsn == f"sqlite+aiosqlite:///{tmp_path / 'x.db'}"
+
+
+def test_identity_mapping_created_at_is_timezone_aware():
+    """The default is datetime.now(timezone.utc) (offset-aware); on Postgres an
+    offset-aware value is only accepted by TIMESTAMPTZ. A naive DateTime column
+    passes on sqlite but breaks the very first _store_put in production
+    (asyncpg: "can't subtract offset-naive and offset-aware datetimes")."""
+    from src.identity_bridge import _IdentityMapping
+
+    assert _IdentityMapping.__table__.c.created_at.type.timezone is True
