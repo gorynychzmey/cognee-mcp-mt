@@ -72,8 +72,10 @@ except ModuleNotFoundError:
 
 try:
     from .oauth_provider import build_oauth_from_env
+    from .identity_bridge import build_identity_bridge_from_env
 except ImportError:
     from oauth_provider import build_oauth_from_env
+    from identity_bridge import build_identity_bridge_from_env
 
 
 # Built-in OAuth 2.1 AS (DCR + PKCE, Google-delegated login). Disabled unless
@@ -94,6 +96,29 @@ if _oauth_provider is not None:
 logger = get_logger()
 
 cognee_client: Optional[CogneeClient] = None
+
+
+def _attach_identity_bridge(api_url: Optional[str] = None):
+    """Connect the identity bridge to the OAuth AS, if both are configured.
+
+    With the bridge attached, every OAuth-authenticated request exchanges the
+    caller's identity (email) for a cognee-API JWT, which the per-request
+    token layer (auth_context) then sends instead of the static --api-token.
+    Returns the bridge (caller owns closing it) or None.
+    """
+    if _oauth_provider is None:
+        return None
+    bridge = build_identity_bridge_from_env(api_url=api_url)
+    if bridge is None:
+        logger.warning(
+            "OAuth AS is enabled but the identity bridge is not configured "
+            "(FASTAPI_USERS_JWT_SECRET and an API URL are required): cognee-API "
+            "calls will fall back to the static --api-token for every user."
+        )
+        return None
+    _oauth_provider.token_exchanger = bridge.cognee_token_for
+    logger.info("Identity bridge attached: OAuth users are exchanged to cognee-API JWTs")
+    return bridge
 
 # Per-dataset error ring buffer (bounded so long-running servers don't accumulate
 # unbounded memory). Each entry is (iso_timestamp, error_message).
@@ -1960,6 +1985,8 @@ async def main():
     # Initialize the global CogneeClient
     cognee_client = CogneeClient(api_url=args.api_url, api_token=args.api_token)
 
+    identity_bridge = _attach_identity_bridge(api_url=args.api_url)
+
     mcp.settings.host = args.host
     mcp.settings.port = int(args.port)
     _configure_transport_security(args.host)
@@ -2026,6 +2053,8 @@ async def main():
                     t.cancel()
         if cognee_client is not None:
             await cognee_client.close()
+        if identity_bridge is not None:
+            await identity_bridge.close()
 
 
 if __name__ == "__main__":
