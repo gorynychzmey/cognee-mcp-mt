@@ -1,3 +1,4 @@
 {"id":"int-0a74e744","kind":"field_change","created_at":"2026-07-10T20:00:24.57244118Z","actor":"Viktor Vostrikov","issue_id":"cognee-mcp-mt-2pq.1","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-fd89907f","kind":"field_change","created_at":"2026-07-10T20:27:43.167400498Z","actor":"Viktor Vostrikov","issue_id":"cognee-mcp-mt-2pq.2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-2a2ff705","kind":"field_change","created_at":"2026-07-10T20:27:43.26902655Z","actor":"Viktor Vostrikov","issue_id":"cognee-mcp-mt-2pq.3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-129ba561","kind":"field_change","created_at":"2026-07-10T21:27:16.661605595Z","actor":"Viktor Vostrikov","issue_id":"cognee-mcp-mt-2pq.4","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
