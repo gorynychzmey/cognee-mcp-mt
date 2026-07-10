@@ -70,7 +70,26 @@ except ModuleNotFoundError:
     )
 
 
-mcp = FastMCP("Cognee")
+try:
+    from .oauth_provider import build_oauth_from_env
+except ImportError:
+    from oauth_provider import build_oauth_from_env
+
+
+# Built-in OAuth 2.1 AS (DCR + PKCE, Google-delegated login). Disabled unless
+# MCP_OAUTH_ENABLED=true; then the SDK serves /register, /authorize, /token,
+# /revoke and the .well-known metadata, and Bearer-gates the MCP endpoint.
+_oauth_provider, _oauth_auth_settings = build_oauth_from_env()
+
+mcp = FastMCP("Cognee", auth_server_provider=_oauth_provider, auth=_oauth_auth_settings)
+
+if _oauth_provider is not None:
+
+    @mcp.custom_route("/auth/google/callback", methods=["GET"])
+    async def google_oauth_callback(request):
+        """Second leg of the Google login started by the AS /authorize endpoint."""
+        return await _oauth_provider.handle_google_callback(request)
+
 
 logger = get_logger()
 

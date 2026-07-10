@@ -491,6 +491,31 @@ def test_build_oauth_from_env_enabled(monkeypatch, tmp_path):
     assert settings.required_scopes is None
 
 
+def test_server_module_wires_oauth_when_enabled(monkeypatch, tmp_path):
+    """src.server picks up the provider + auth settings and the callback route."""
+    server = importlib.import_module("src.server")
+    assert server.mcp._auth_server_provider is None  # suite default: OAuth off
+
+    monkeypatch.setenv("MCP_OAUTH_ENABLED", "true")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "gid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "gsecret")
+    monkeypatch.setenv("MCP_PUBLIC_BASE_URL", "https://mcp.example.com")
+    monkeypatch.setenv("GOOGLE_ALLOWED_WORKSPACES", "acme.com")
+    monkeypatch.setenv("MCP_OAUTH_DB_PATH", str(tmp_path / "oauth.db"))
+    try:
+        reloaded = importlib.reload(server)
+        assert isinstance(reloaded._oauth_provider, GoogleWorkspaceOAuthProvider)
+        assert reloaded.mcp._auth_server_provider is reloaded._oauth_provider
+        assert reloaded.mcp.settings.auth is not None
+        route_paths = [route.path for route in reloaded.mcp._custom_starlette_routes]
+        assert "/auth/google/callback" in route_paths
+    finally:
+        # other tests import src.server too — restore the OAuth-disabled module
+        monkeypatch.delenv("MCP_OAUTH_ENABLED", raising=False)
+        restored = importlib.reload(server)
+        assert restored.mcp._auth_server_provider is None
+
+
 # --- full-stack integration ------------------------------------------------------
 
 
