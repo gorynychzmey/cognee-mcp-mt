@@ -106,7 +106,6 @@ class CogneeIdentityBridge:
         self.store_dsn = store_dsn or _store_dsn_from_env()
         self.jwt_lifetime_seconds = jwt_lifetime_seconds
         self.jwt_audience = list(jwt_audience) if jwt_audience else list(DEFAULT_JWT_AUDIENCE)
-        self._owns_http_client = http_client is None
         self.http_client = http_client or httpx.AsyncClient()
         self._seed_map = {_normalize_email(k): v for k, v in (seed_map or {}).items()}
         self._time = time_func
@@ -225,9 +224,8 @@ class CogneeIdentityBridge:
             return token
 
     async def close(self) -> None:
-        """Release the HTTP client (if owned) and the store engine."""
-        if self._owns_http_client or self.http_client is not None:
-            await self.http_client.aclose()
+        """Release the HTTP client (the bridge owns it, injected or not) and the store."""
+        await self.http_client.aclose()
         if self._engine is not None:
             await self._engine.dispose()
 
