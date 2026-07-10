@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "cognee_mcp_mt",
+  "project_id": "b449c6b7-db5a-448f-9e64-604fe1569f25"
+}
