@@ -32,7 +32,9 @@ auth_context = importlib.import_module("src.auth_context")
 CogneeClient = importlib.import_module("src.cognee_client").CogneeClient
 
 
-def _http_request(headers: dict[str, str] | None = None) -> Request:
+def _http_request(
+    headers: dict[str, str] | None = None, scope_user: object | None = None
+) -> Request:
     """Build a starlette Request like the SDK attaches to request_ctx."""
     raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
     scope = {
@@ -42,6 +44,8 @@ def _http_request(headers: dict[str, str] | None = None) -> Request:
         "headers": raw_headers,
         "query_string": b"",
     }
+    if scope_user is not None:
+        scope["user"] = scope_user
     return Request(scope)
 
 
@@ -107,6 +111,75 @@ def test_explicit_override_wins_over_request_ctx():
         assert auth_context.get_request_token() is None
     finally:
         pass
+
+
+# --- scope["user"] cognee_token (identity bridge / OAuth layer) --------------
+
+
+class _FakeAccessToken:
+    """Duck-typed stand-in for the OAuth layer's AccessToken subclass."""
+
+    def __init__(self, cognee_token: str | None):
+        self.cognee_token = cognee_token
+
+
+class _FakeAuthenticatedUser:
+    """Duck-typed stand-in for the SDK's AuthenticatedUser in scope['user']."""
+
+    def __init__(self, access_token: object | None):
+        if access_token is not None:
+            self.access_token = access_token
+
+
+def test_scope_user_cognee_token_wins_over_bearer_header():
+    # the Bearer header carries OUR opaque token (useless for cognee-API);
+    # the exchanged cognee JWT on scope["user"].access_token must win
+    request = _http_request(
+        {"Authorization": "Bearer our-opaque-mcp-token"},
+        scope_user=_FakeAuthenticatedUser(_FakeAccessToken("exchanged-cognee-jwt")),
+    )
+    ctx_token = request_ctx.set(_request_context(request))
+    try:
+        assert auth_context.get_request_token() == "exchanged-cognee-jwt"
+    finally:
+        request_ctx.reset(ctx_token)
+
+
+def test_scope_user_with_none_cognee_token_falls_through_to_header():
+    request = _http_request(
+        {"Authorization": "Bearer caller-jwt"},
+        scope_user=_FakeAuthenticatedUser(_FakeAccessToken(None)),
+    )
+    ctx_token = request_ctx.set(_request_context(request))
+    try:
+        assert auth_context.get_request_token() == "caller-jwt"
+    finally:
+        request_ctx.reset(ctx_token)
+
+
+def test_scope_user_without_access_token_falls_through_to_header():
+    request = _http_request(
+        {"Authorization": "Bearer caller-jwt"},
+        scope_user=_FakeAuthenticatedUser(None),
+    )
+    ctx_token = request_ctx.set(_request_context(request))
+    try:
+        assert auth_context.get_request_token() == "caller-jwt"
+    finally:
+        request_ctx.reset(ctx_token)
+
+
+def test_explicit_override_still_wins_over_scope_user():
+    request = _http_request(
+        scope_user=_FakeAuthenticatedUser(_FakeAccessToken("exchanged-cognee-jwt")),
+    )
+    ctx_token = request_ctx.set(_request_context(request))
+    override = auth_context.set_request_token("explicit-token")
+    try:
+        assert auth_context.get_request_token() == "explicit-token"
+    finally:
+        auth_context.reset_request_token(override)
+        request_ctx.reset(ctx_token)
 
 
 # --- CogneeClient header integration ----------------------------------------
