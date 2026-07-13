@@ -8,6 +8,8 @@
 
 ## PR-0 — ветка `fix/mcp-dockerfile-layer-dedup`
 
+> **SUBMITTED:** https://github.com/topoteretes/cognee/pull/4045 (2026-07-13)
+
 **Title:** fix(cognee-mcp): image is twice its content size — hand /app ownership to COPY --chown
 
 **Description (основа):**
@@ -15,13 +17,13 @@ The cognee-mcp image is ~18GB while its filesystem holds ~8.6GB. The final stage
 COPYs /app (~8.6GB) and then runs a separate `chown -R cognee:cognee /app`:
 overlayfs materialises a second full copy of the tree in the chown layer.
 
-Fix: create the user before the COPY, hand ownership to `COPY --chown`, and keep a
+Fix: create the user **before** the COPY, hand ownership to `COPY --chown`, and keep a
 non-recursive `chown` of the still-empty WORKDIR — /app doubles as HOME, so the
 runtime user must be able to write dotfiles/caches there (Kuzu extension cache).
 
 Measured on podman: 18GB -> 9.12GB, one 8.9GB layer instead of two; container
 still runs as uid 1000 `cognee`; /app writable; MCP smoke test (health,
-.well-known, tool call) green.
+.well-known, tool call) runs green.
 
 **Acceptance criteria:** image size halves; `podman history` shows a single big
 layer; container starts as non-root `cognee`; /app writable as HOME.
@@ -32,11 +34,13 @@ layer; container starts as non-root `cognee`; /app writable as HOME.
 
 ## PR-1 — ветка `feat/mcp-per-request-api-token`
 
+> **SUBMITTED:** https://github.com/topoteretes/cognee/pull/4046 (2026-07-13)
+
 **Title:** feat(cognee-mcp): per-request cognee-API token in API mode (multi-user)
 
 **Description (основа):**
 In API mode the client pins `--api-token` once at process start, so one MCP
-instance == one cognee-API user, even though cognee-API itself is multi-user.
+instance can be used only by one cognee-API user, even though cognee-API itself is multi-user.
 This PR resolves the caller's token on every request instead:
 
 1. explicit contextvar override (`src/auth_context.py`) — a hook for auth
@@ -67,10 +71,12 @@ cognee-API calls. 11 new tests; existing suite untouched and green.
 
 ## PR-2 — ветка `feat/mcp-builtin-oauth-as` (stacked на PR-1)
 
+> **NOT YET SUBMITTED** — ждём реакции на PR-1 (#4046), затем отправляем (тактика SPEC §7).
+
 **Title:** feat(cognee-mcp): built-in OAuth 2.1 AS (Google login) + cognee-API identity bridge
 
 **Description (основа):**
-MCP clients that require OAuth 2.1 with DCR (Claude.ai web/mobile connectors)
+MCP clients that require OAuth 2.1 with DCR (f.e. Claude.ai web/mobile connectors)
 currently need an external auth proxy in front of cognee-mcp, and even then all
 users collapse into one cognee identity. This PR makes the MCP server itself an
 OAuth 2.1 AS using the SDK's native `auth_server_provider` support, and bridges
