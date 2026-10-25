@@ -475,3 +475,104 @@ async def test_document_retrieval_tools_format_json(monkeypatch):
     neighbor_payload = json.loads(neighbors_result[0].text)
     assert neighbor_payload["target_chunk_id"] == "chunk-1"
     assert neighbor_payload["direction"] == "forward"
+
+
+UUID_A = "11111111-1111-1111-1111-111111111111"
+UUID_B = "22222222-2222-2222-2222-222222222222"
+
+
+def test_split_dataset_refs_separates_uuids_from_names():
+    split = server_utils.split_dataset_refs
+
+    assert split(None) == (None, None)
+    names, ids = split(f"{UUID_A}, {UUID_B}")
+    assert names is None
+    assert [str(i) for i in ids] == [UUID_A, UUID_B]
+    assert split("alpha,beta") == (["alpha", "beta"], None)
+    names, ids = split(f"alpha,{UUID_A},not-a-uuid-1234,1111")
+    assert names == ["alpha", "not-a-uuid-1234", "1111"]
+    assert [str(i) for i in ids] == [UUID_A]
+
+
+async def _capture_api_payload(call_name, datasets_arg):
+    """Run a recall/search tool against a mocked HTTP API; return the JSON payload."""
+    import src.server as server
+
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[])
+
+    client = CogneeClient(api_url="http://cognee.local")
+    await client.client.aclose()
+    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    original = server.cognee_client
+    server.cognee_client = client
+    try:
+        if call_name == "recall":
+            await server.recall(query="q", search_type="CHUNKS", datasets=datasets_arg)
+        else:
+            await server.search("q", "CHUNKS", datasets=datasets_arg)
+    finally:
+        server.cognee_client = original
+        await client.close()
+    assert requests[0].url.path == f"/api/v1/{call_name}"
+    return json.loads(requests[0].content.decode())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ["recall", "search"])
+async def test_tool_uuid_only_datasets_sent_as_dataset_ids(tool):
+    payload = await _capture_api_payload(tool, f"{UUID_A},{UUID_B}")
+
+    assert payload["dataset_ids"] == [UUID_A, UUID_B]
+    assert "datasets" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ["recall", "search"])
+async def test_tool_names_only_datasets_unchanged(tool):
+    payload = await _capture_api_payload(tool, "alpha,beta")
+
+    assert payload["datasets"] == ["alpha", "beta"]
+    assert "dataset_ids" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ["recall", "search"])
+async def test_tool_mixed_datasets_send_both_fields(tool):
+    payload = await _capture_api_payload(tool, f"alpha,{UUID_A},12345-not-uuid")
+
+    assert payload["datasets"] == ["alpha", "12345-not-uuid"]
+    assert payload["dataset_ids"] == [UUID_A]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ["recall", "search"])
+async def test_tool_without_datasets_sends_neither_field(tool):
+    payload = await _capture_api_payload(tool, None)
+
+    assert "datasets" not in payload
+    assert "dataset_ids" not in payload
+
+
+@pytest.mark.asyncio
+async def test_list_datasets_json_text_lists_names_and_ids(monkeypatch):
+    import src.server as server
+
+    class FakeClient:
+        async def list_datasets(self):
+            return [{"id": UUID_A, "name": "alpha"}, {"id": UUID_B, "name": "shared"}]
+
+    monkeypatch.setattr(server, "cognee_client", FakeClient())
+
+    result = await server.list_datasets_json()
+
+    text = result.content[0].text
+    assert text.splitlines()[0] == "2 dataset(s)."
+    assert f"alpha — {UUID_A}" in text
+    assert f"shared — {UUID_B}" in text
+    assert result.structuredContent == {
+        "datasets": [{"id": UUID_A, "name": "alpha"}, {"id": UUID_B, "name": "shared"}]
+    }

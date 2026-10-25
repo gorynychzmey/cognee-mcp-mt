@@ -214,6 +214,7 @@ class CogneeClient:
         datasets: Optional[List[str]] = None,
         system_prompt: Optional[str] = None,
         top_k: int = 15,
+        dataset_ids: Optional[List[UUID]] = None,
     ) -> Any:
         """
         Search the knowledge graph.
@@ -225,7 +226,9 @@ class CogneeClient:
         query_type : str
             Type of search (e.g., "GRAPH_COMPLETION", "INSIGHTS", etc.)
         datasets : List[str], optional
-            List of datasets to search
+            Dataset names to search (resolved among the caller's own datasets)
+        dataset_ids : List[UUID], optional
+            Dataset UUIDs to search; also reaches datasets shared with the caller
         system_prompt : str, optional
             System prompt for completion searches
         top_k : int
@@ -242,6 +245,8 @@ class CogneeClient:
             payload = {"query": query_text, "search_type": query_type.upper(), "top_k": top_k}
             if datasets:
                 payload["datasets"] = datasets
+            if dataset_ids:
+                payload["dataset_ids"] = [str(i) for i in dataset_ids]
             if system_prompt:
                 payload["system_prompt"] = system_prompt
 
@@ -260,6 +265,8 @@ class CogneeClient:
                 }
                 if datasets:
                     search_kwargs["datasets"] = datasets
+                if dataset_ids:
+                    search_kwargs["dataset_ids"] = dataset_ids
                 if system_prompt:
                     search_kwargs["system_prompt"] = system_prompt
                 results = await self.cognee.search(**search_kwargs)
@@ -546,6 +553,7 @@ class CogneeClient:
         datasets: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         top_k: int = 15,
+        dataset_ids: Optional[List[UUID]] = None,
     ) -> Any:
         """Search memory via recall() with auto-routing and session awareness."""
         if self.use_api:
@@ -555,6 +563,8 @@ class CogneeClient:
                 payload["search_type"] = search_type.upper()
             if datasets:
                 payload["datasets"] = datasets
+            if dataset_ids:
+                payload["dataset_ids"] = [str(i) for i in dataset_ids]
             if session_id:
                 payload["session_id"] = session_id
             response = await self.client.post(endpoint, json=payload, headers=self._get_headers())
@@ -569,6 +579,8 @@ class CogneeClient:
                     kwargs["query_type"] = SearchType[search_type.upper()]
                 if datasets:
                     kwargs["datasets"] = datasets
+                if dataset_ids:
+                    kwargs["dataset_ids"] = dataset_ids
                 if session_id:
                     kwargs["session_id"] = session_id
                 return await self.cognee.recall(query_text=query_text, **kwargs)

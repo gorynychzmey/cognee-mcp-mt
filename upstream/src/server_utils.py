@@ -4,6 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from uuid import UUID
 from typing import Any, Callable, Optional
 
 
@@ -116,6 +117,25 @@ def parse_csv_list(value: Optional[str]) -> Optional[list[str]]:
         return None
     items = [item.strip() for item in value.split(",") if item.strip()]
     return items or None
+
+
+def split_dataset_refs(
+    value: Optional[str],
+) -> tuple[Optional[list[str]], Optional[list[UUID]]]:
+    """Split a comma-separated dataset list into (names, ids).
+
+    Entries that parse as UUIDs are returned as ``UUID`` objects so they can be
+    sent as ``dataset_ids`` (which also reaches datasets shared with the caller);
+    everything else stays a dataset name.
+    """
+    names: list[str] = []
+    ids: list[UUID] = []
+    for item in parse_csv_list(value) or []:
+        try:
+            ids.append(UUID(item))
+        except ValueError:
+            names.append(item)
+    return (names or None), (ids or None)
 
 
 def normalize_search_type(search_type: str) -> str:

@@ -42,6 +42,7 @@ try:
         normalize_search_type,
         parse_cognify_data,
         parse_csv_list,
+        split_dataset_refs,
         validate_cognify_file_paths,
         validate_top_k,
     )
@@ -53,6 +54,7 @@ except ImportError:
         normalize_search_type,
         parse_cognify_data,
         parse_csv_list,
+        split_dataset_refs,
         validate_cognify_file_paths,
         validate_top_k,
     )
@@ -620,6 +622,11 @@ async def search(
         - Higher values (10-20): More comprehensive, but slower and more context-heavy
         Helps manage response size and context window usage in MCP clients.
 
+    datasets : str, optional
+        Comma-separated dataset names or UUIDs. Names resolve only among
+        your own datasets; address a dataset shared with you by its UUID
+        (see list_datasets_json).
+
     Returns
     -------
     list
@@ -663,7 +670,9 @@ async def search(
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
     async def search_task(
-        search_query: str, search_type: str, top_k: int, datasets_list: list = None
+        search_query: str, search_type: str, top_k: int,
+        datasets_list: list = None,
+        dataset_ids: list = None,
     ) -> str:
         """
         Internal task to execute knowledge graph search with result formatting.
@@ -693,6 +702,7 @@ async def search(
                 query_type=search_type,
                 top_k=top_k,
                 datasets=datasets_list,
+                dataset_ids=dataset_ids,
             )
 
             # Strip embedding vectors from results to save LLM context
@@ -709,13 +719,14 @@ async def search(
             )
 
     # Parse comma-separated datasets into list
-    datasets_list = parse_csv_list(datasets)
+    datasets_list, dataset_ids = split_dataset_refs(datasets)
     try:
         search_results = await search_task(
             search_query,
             normalized_search_type,
             normalized_top_k,
             datasets_list,
+            dataset_ids,
         )
     except Exception as e:
         error_msg = f"Search failed: {str(e)}"
@@ -1197,7 +1208,9 @@ async def recall(
         GRAPH_COMPLETION_COT, RAG_COMPLETION, CHUNKS, SUMMARIES,
         TEMPORAL, FEELING_LUCKY, etc.
     datasets : str, optional
-        Comma-separated dataset names to search within.
+        Comma-separated dataset names or UUIDs. Names resolve only among
+        your own datasets; address a dataset shared with you by its UUID
+        (see list_datasets_json).
     session_id : str, optional
         Session ID for session-first search.
     top_k : int
@@ -1206,11 +1219,12 @@ async def recall(
     with redirect_stdout(sys.stderr):
         try:
             normalized_top_k = validate_top_k(top_k)
-            dataset_list = parse_csv_list(datasets)
+            dataset_list, dataset_ids = split_dataset_refs(datasets)
             results = await cognee_client.recall(
                 query_text=query,
                 search_type=search_type,
                 datasets=dataset_list,
+                dataset_ids=dataset_ids,
                 session_id=session_id,
                 top_k=normalized_top_k,
             )
@@ -1663,8 +1677,10 @@ async def list_datasets_json() -> types.CallToolResult:
         else:
             datasets.append({"id": str(ds.id), "name": ds.name})
 
+    lines = [f"{len(datasets)} dataset(s)."]
+    lines.extend(f"{ds['name']} — {ds['id']}" for ds in datasets)
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=f"{len(datasets)} dataset(s).")],
+        content=[types.TextContent(type="text", text="\n".join(lines))],
         structuredContent={"datasets": datasets},
     )
 
