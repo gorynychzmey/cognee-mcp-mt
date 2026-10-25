@@ -489,9 +489,23 @@ def test_split_dataset_refs_separates_uuids_from_names():
     assert names is None
     assert [str(i) for i in ids] == [UUID_A, UUID_B]
     assert split("alpha,beta") == (["alpha", "beta"], None)
-    names, ids = split(f"alpha,{UUID_A},not-a-uuid-1234,1111")
-    assert names == ["alpha", "not-a-uuid-1234", "1111"]
-    assert [str(i) for i in ids] == [UUID_A]
+    assert split("alpha,not-a-uuid-1234,1111") == (["alpha", "not-a-uuid-1234", "1111"], None)
+
+
+def test_split_dataset_refs_rejects_mixed_names_and_uuids():
+    with pytest.raises(ValueError, match="not both"):
+        server_utils.split_dataset_refs(f"alpha,{UUID_A}")
+
+
+def test_split_dataset_refs_normalises_uuid_spellings():
+    for raw in (
+        "{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}",
+        "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+        "urn:uuid:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    ):
+        names, ids = server_utils.split_dataset_refs(raw)
+        assert names is None
+        assert [str(i) for i in ids] == ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
 
 
 async def _capture_api_payload(call_name, datasets_arg):
@@ -541,11 +555,15 @@ async def test_tool_names_only_datasets_unchanged(tool):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tool", ["recall", "search"])
-async def test_tool_mixed_datasets_send_both_fields(tool):
-    payload = await _capture_api_payload(tool, f"alpha,{UUID_A},12345-not-uuid")
+async def test_tool_mixed_names_and_uuids_returns_error(tool):
+    import src.server as server
 
-    assert payload["datasets"] == ["alpha", "12345-not-uuid"]
-    assert payload["dataset_ids"] == [UUID_A]
+    fn = server.recall if tool == "recall" else server.search
+    kwargs = {"query": "q"} if tool == "recall" else {"search_query": "q", "search_type": "CHUNKS"}
+    result = await fn(datasets=f"alpha,{UUID_A}", **kwargs)
+
+    assert "pass dataset names or dataset UUIDs, not both" in result[0].text
+    assert result[0].text.startswith("Error:")
 
 
 @pytest.mark.asyncio

@@ -4,8 +4,8 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from uuid import UUID
 from typing import Any, Callable, Optional
+from uuid import UUID
 
 
 MAX_TOP_K = 100
@@ -126,7 +126,9 @@ def split_dataset_refs(
 
     Entries that parse as UUIDs are returned as ``UUID`` objects so they can be
     sent as ``dataset_ids`` (which also reaches datasets shared with the caller);
-    everything else stays a dataset name.
+    everything else stays a dataset name. A name that is itself a valid UUID is
+    treated as a UUID. Names and UUIDs cannot be mixed, because Cognee ignores
+    names when ``dataset_ids`` is present; mixing raises ``ValueError``.
     """
     names: list[str] = []
     ids: list[UUID] = []
@@ -135,6 +137,8 @@ def split_dataset_refs(
             ids.append(UUID(item))
         except ValueError:
             names.append(item)
+    if names and ids:
+        raise ValueError("pass dataset names or dataset UUIDs, not both")
     return (names or None), (ids or None)
 
 

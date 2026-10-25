@@ -625,7 +625,8 @@ async def search(
     datasets : str, optional
         Comma-separated dataset names or UUIDs. Names resolve only among
         your own datasets; address a dataset shared with you by its UUID
-        (see list_datasets_json).
+        (see list_datasets_json). A name that is itself a valid UUID is
+        treated as a UUID. Pass names or UUIDs, not both.
 
     Returns
     -------
@@ -670,7 +671,9 @@ async def search(
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
     async def search_task(
-        search_query: str, search_type: str, top_k: int,
+        search_query: str,
+        search_type: str,
+        top_k: int,
         datasets_list: list = None,
         dataset_ids: list = None,
     ) -> str:
@@ -719,8 +722,8 @@ async def search(
             )
 
     # Parse comma-separated datasets into list
-    datasets_list, dataset_ids = split_dataset_refs(datasets)
     try:
+        datasets_list, dataset_ids = split_dataset_refs(datasets)
         search_results = await search_task(
             search_query,
             normalized_search_type,
@@ -1210,7 +1213,8 @@ async def recall(
     datasets : str, optional
         Comma-separated dataset names or UUIDs. Names resolve only among
         your own datasets; address a dataset shared with you by its UUID
-        (see list_datasets_json).
+        (see list_datasets_json). A name that is itself a valid UUID is
+        treated as a UUID. Pass names or UUIDs, not both.
     session_id : str, optional
         Session ID for session-first search.
     top_k : int
