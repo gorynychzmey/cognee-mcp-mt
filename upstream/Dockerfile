@@ -1,7 +1,9 @@
 # Build the MCP App workspace bundle (React/Vite, served inline by the MCP
 # server). Vite writes to ../src/app_bundles/ relative to apps-src, so we
 # mirror the repo layout: /build/cognee-mcp/{apps-src,src}.
-FROM node:22-alpine AS app-bundle
+# The bundle is platform-independent (static JS/HTML): build it on the build
+# platform so multi-arch builds do not run npm under emulation.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS app-bundle
 WORKDIR /build/cognee-mcp/apps-src
 COPY ./cognee-mcp/apps-src/package.json ./cognee-mcp/apps-src/package-lock.json ./
 RUN npm ci
